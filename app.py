@@ -7,28 +7,24 @@ import seaborn as sns
 st.set_page_config(page_title="India Real Estate Analytics", layout="wide")
 
 # ==========================================
-# 1. CORE DATA LOADER
+# 1. DATA INFRASTRUCTURE LOADERS
 # ==========================================
 @st.cache_data
-def load_and_preprocess_data():
-    # Read original CSV file
-    df_raw = pd.read_csv("india_housing_prices.csv")
+def load_app_datasets():
+    # Load your final processed 31-column dataset
+    df_proc = pd.read_csv("cleaned_india_housing_prices.csv")
     
-    # Mirror your Step 1 preprocessing rules to establish baseline features
-    df_proc = df_raw.copy()
-    df_proc['School_Density_Score'] = df_proc['Nearby_Schools'] + df_proc['Nearby_Hospitals']
+    # Load original raw text columns back strictly for dropdown visualization mapping
+    df_raw_text = pd.read_csv("india_housing_prices.csv", usecols=['ID', 'City', 'BHK', 'Price_in_Lakhs'])
     
-    # Establish binary target logic mapping matching your criteria
-    cond_low_price = df_proc['Price_per_SqFt'] < df_proc['Price_per_SqFt'].mean()
-    cond_high_amenities = df_proc['School_Density_Score'] > 10
-    df_proc['Good_Investment'] = (cond_low_price & cond_high_amenities).astype(int)
-    
-    return df_proc
+    # Merge them seamlessly on ID so we have human-readable text labels AND clean numeric columns
+    df_combined = pd.merge(df_proc, df_raw_text, on='ID', suffixes=('_scaled', ''))
+    return df_combined
 
 try:
-    df_active = load_and_preprocess_data()
+    df_active = load_app_datasets()
 except Exception as e:
-    st.error(f"Could not load data file: {e}. Ensure 'india_housing_prices.csv' is in this exact folder.")
+    st.error(f"Could not load data engines: {e}. Ensure both 'india_housing_prices.csv' and 'cleaned_india_housing_prices.csv' live in your GitHub repository.")
     st.stop()
 
 # App Header Layout
@@ -36,21 +32,22 @@ st.title("🏡 India Real Estate Analytics & Investment App")
 st.markdown("---")
 
 # ==========================================
-# 2. SIDEBAR FILTER LOGIC (ACTIVATE FILTERS)
+# 2. SIDEBAR FILTER LOGIC (FIXED COLUMN MAPPING)
 # ==========================================
 st.sidebar.header("🎯 Filter Regional Inventory")
+# Using the merged human-readable text column 'City' safely now
 selected_city = st.sidebar.selectbox("Choose Target City:", sorted(df_active['City'].unique()))
 selected_bhk = st.sidebar.slider("Select Minimum BHK:", min_value=int(df_active['BHK'].min()), max_value=int(df_active['BHK'].max()), value=3)
 max_budget = st.sidebar.number_input("Maximum Budget Caps (in Lakhs):", min_value=10, max_value=2000, value=300)
 
-# CRUCIAL FIX: Actively subset the 250,000 dataset rows matching ALL user inputs
+# Slicing matching inventory rows using human-readable columns
 filtered_df = df_active[
     (df_active['City'] == selected_city) & 
     (df_active['BHK'] >= selected_bhk) & 
     (df_active['Price_in_Lakhs'] <= max_budget)
 ]
 
-# Display live status of inventory depth inside sidebar
+# Display live status of inventory depth inside sidebar layout
 st.sidebar.metric(label="Matching Properties Found", value=f"{len(filtered_df):,}")
 
 # Layout Columns
@@ -84,7 +81,7 @@ with col_outputs:
             st.warning("⚠️ CLASSIFICATION: Standard Market Inventory. Not a high-yield value buy.")
             conf_score = 87.2
             
-        # B. Regression Target Logic (Simulating standard 5-year growth)
+        # B. Regression Target Logic (Simulating standard 5-year compounding growth)
         estimated_future_price = sim_price_now * ((1 + 0.065) ** 5)
         
         m1, m2 = st.columns(2)
@@ -102,7 +99,7 @@ with col_outputs:
         st.info("Click 'Analyze Property' on the left to trigger predictions and charts.")
 
 # ==========================================
-# 5. DYNAMIC VISUAL INSIGHTS (TREND CHARTS BASED ON SELECTED CITY)
+# 5. DYNAMIC VISUAL INSIGHTS (TREND CHARTS)
 # ==========================================
 st.markdown("---")
 st.header(f"📈 Regional Real-Time Insights: {selected_city}")
@@ -120,8 +117,9 @@ if len(filtered_df) > 0:
     with col_g2:
         st.subheader("Price per SqFt Trend Matrix")
         fig_trend, ax_trend = plt.subplots(figsize=(6, 3))
-        sns.scatterplot(data=filtered_df.sample(min(1000, len(filtered_df))), x="Size_in_SqFt", y="Price_in_Lakhs", hue="Good_Investment", palette="Set1", alpha=0.6, ax=ax_trend)
-        ax_trend.set_xlabel("Size in SqFt")
+        sample_size = min(1000, len(filtered_df))
+        sns.scatterplot(data=filtered_df.sample(sample_size), x="Size_in_SqFt_scaled", y="Price_in_Lakhs", hue="Good_Investment", palette="Set1", alpha=0.6, ax=ax_trend)
+        ax_trend.set_xlabel("Standardized Size in SqFt")
         ax_trend.set_ylabel("Price (Lakhs)")
         st.pyplot(fig_trend)
 else:
