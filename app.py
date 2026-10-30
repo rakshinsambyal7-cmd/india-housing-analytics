@@ -17,7 +17,7 @@ def load_app_datasets():
     # Load original raw text columns back strictly for dropdown visualization mapping
     df_raw_text = pd.read_csv("india_housing_prices.csv", usecols=['ID', 'City', 'BHK', 'Price_in_Lakhs'])
     
-    # Drop columns from raw text that already exist in df_proc to avoid duplicate column suffix confusion
+    # Drop columns from raw text that already exist in df_proc to avoid duplicate column confusion
     df_raw_text = df_raw_text.drop(columns=['BHK', 'Price_in_Lakhs'], errors='ignore')
     
     # Merge them seamlessly on ID 
@@ -42,7 +42,7 @@ selected_city = st.sidebar.selectbox("Choose Target City:", sorted(df_active['Ci
 selected_bhk = st.sidebar.slider("Select Minimum BHK:", min_value=int(df_active['BHK'].min()), max_value=int(df_active['BHK'].max()), value=3)
 max_budget = st.sidebar.number_input("Maximum Budget Caps (in Lakhs):", min_value=10, max_value=2000, value=300)
 
-# Slicing matching inventory rows using clean un-suffixed columns
+# Slicing matching inventory rows
 filtered_df = df_active[
     (df_active['City'] == selected_city) & 
     (df_active['BHK'] >= selected_bhk) & 
@@ -112,27 +112,36 @@ if len(filtered_df) > 0:
     with col_g1:
         st.subheader("Property Value Distribution in Area")
         fig_hist, ax_hist = plt.subplots(figsize=(6, 3))
-        sns.histplot(filtered_df['Price_in_Lakhs'], bins=15, kde=True, color="teal", ax=ax_hist)
+        # Safely pull the price series array directly
+        prices_array = filtered_df['Price_in_Lakhs'].values
+        sns.histplot(x=prices_array, bins=15, kde=True, color="teal", ax=ax_hist)
         ax_hist.set_xlabel("Price in Lakhs")
         st.pyplot(fig_hist)
         
     with col_g2:
-        st.subheader("Price per SqFt Trend Matrix")
+        st.subheader("Price vs Size Trend Matrix")
         fig_trend, ax_trend = plt.subplots(figsize=(6, 3))
-        sample_size = min(1000, len(filtered_df))
         
-        # Safe scatterplot utilizing guaranteed clean names
+        sample_size = min(1000, len(filtered_df))
+        df_sample = filtered_df.sample(sample_size)
+        
+        # FIX: Directly pull column values into pure numpy arrays.
+        # This completely stops Seaborn from doing string column matching lookups.
+        x_values = df_sample.iloc[:, df_sample.columns.str.contains('Size|size')].iloc[:, 0].values
+        y_values = df_sample['Price_in_Lakhs'].values
+        hue_values = df_sample.iloc[:, df_sample.columns.str.contains('Investment|investment')].iloc[:, 0].values
+        
         sns.scatterplot(
-            data=filtered_df.sample(sample_size), 
-            x="Size_in_SqFt", 
-            y="Price_in_Lakhs", 
-            hue="Good_Investment", 
+            x=x_values, 
+            y=y_values, 
+            hue=hue_values, 
             palette="Set1", 
             alpha=0.6, 
             ax=ax_trend
         )
-        ax_trend.set_xlabel("Size in SqFt")
+        ax_trend.set_xlabel("Property Size Value")
         ax_trend.set_ylabel("Price (Lakhs)")
+        ax_trend.legend(title="Good Investment")
         st.pyplot(fig_trend)
 else:
     st.warning("⚠️ No matching data entries found for your active filter selections. Try raising your budget or reducing minimum BHK targets.")
