@@ -7,18 +7,24 @@ import seaborn as sns
 st.set_page_config(page_title="India Real Estate Analytics", layout="wide")
 
 # ==========================================
-# 1. CORE DATA LOADER (CRUCIAL PATH FIX)
+# 1. DATA INFRASTRUCTURE LOADERS
 # ==========================================
 @st.cache_data
-def load_processed_dataset():
-    # Force the engine to point strictly to your generated 31-column dataset file
-    df = pd.read_csv("cleaned_india_housing_prices.csv")
-    return df
+def load_app_datasets():
+    # Load your final processed 31-column dataset
+    df_proc = pd.read_csv("cleaned_india_housing_prices.csv")
+    
+    # Load original raw text columns back strictly for dropdown visualization mapping
+    df_raw_text = pd.read_csv("india_housing_prices.csv", usecols=['ID', 'City', 'BHK', 'Price_in_Lakhs'])
+    
+    # Merge them seamlessly on ID so we have human-readable text labels AND clean numeric columns
+    df_combined = pd.merge(df_proc, df_raw_text, on='ID', suffixes=('_scaled', ''))
+    return df_combined
 
 try:
-    df_active = load_processed_dataset()
+    df_active = load_app_datasets()
 except Exception as e:
-    st.error(f"Could not load data file: {e}. Please ensure 'cleaned_india_housing_prices.csv' is uploaded inside this exact repository.")
+    st.error(f"Could not load data engines: {e}. Ensure both 'india_housing_prices.csv' and 'cleaned_india_housing_prices.csv' live in your GitHub repository.")
     st.stop()
 
 # App Header Layout
@@ -26,14 +32,15 @@ st.title("🏡 India Real Estate Analytics & Investment App")
 st.markdown("---")
 
 # ==========================================
-# 2. SIDEBAR FILTER LOGIC
+# 2. SIDEBAR FILTER LOGIC (FIXED COLUMN MAPPING)
 # ==========================================
 st.sidebar.header("🎯 Filter Regional Inventory")
+# Using the merged human-readable text column 'City' safely now
 selected_city = st.sidebar.selectbox("Choose Target City:", sorted(df_active['City'].unique()))
 selected_bhk = st.sidebar.slider("Select Minimum BHK:", min_value=int(df_active['BHK'].min()), max_value=int(df_active['BHK'].max()), value=3)
 max_budget = st.sidebar.number_input("Maximum Budget Caps (in Lakhs):", min_value=10, max_value=2000, value=300)
 
-# Active database rows slicing matching your user inputs
+# Slicing matching inventory rows using human-readable columns
 filtered_df = df_active[
     (df_active['City'] == selected_city) & 
     (df_active['BHK'] >= selected_bhk) & 
@@ -111,8 +118,8 @@ if len(filtered_df) > 0:
         st.subheader("Price per SqFt Trend Matrix")
         fig_trend, ax_trend = plt.subplots(figsize=(6, 3))
         sample_size = min(1000, len(filtered_df))
-        sns.scatterplot(data=filtered_df.sample(sample_size), x="Size_in_SqFt", y="Price_in_Lakhs", hue="Good_Investment", palette="Set1", alpha=0.6, ax=ax_trend)
-        ax_trend.set_xlabel("Size in SqFt")
+        sns.scatterplot(data=filtered_df.sample(sample_size), x="Size_in_SqFt_scaled", y="Price_in_Lakhs", hue="Good_Investment", palette="Set1", alpha=0.6, ax=ax_trend)
+        ax_trend.set_xlabel("Standardized Size in SqFt")
         ax_trend.set_ylabel("Price (Lakhs)")
         st.pyplot(fig_trend)
 else:
