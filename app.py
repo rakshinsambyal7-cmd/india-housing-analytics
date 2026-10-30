@@ -112,7 +112,6 @@ if len(filtered_df) > 0:
     with col_g1:
         st.subheader("Property Value Distribution in Area")
         fig_hist, ax_hist = plt.subplots(figsize=(6, 3))
-        # Safely pull the price series array directly
         prices_array = filtered_df['Price_in_Lakhs'].values
         sns.histplot(x=prices_array, bins=15, kde=True, color="teal", ax=ax_hist)
         ax_hist.set_xlabel("Price in Lakhs")
@@ -125,23 +124,26 @@ if len(filtered_df) > 0:
         sample_size = min(1000, len(filtered_df))
         df_sample = filtered_df.sample(sample_size)
         
-        # FIX: Directly pull column values into pure numpy arrays.
-        # This completely stops Seaborn from doing string column matching lookups.
-        x_values = df_sample.iloc[:, df_sample.columns.str.contains('Size|size')].iloc[:, 0].values
-        y_values = df_sample['Price_in_Lakhs'].values
-        hue_values = df_sample.iloc[:, df_sample.columns.str.contains('Investment|investment')].iloc[:, 0].values
+        # BULLETPROOF FALLBACK LOCATOR FOR COLUMN MATCHING
+        # Locate Size column
+        size_matches = df_sample.columns[df_sample.columns.str.contains('Size|size', case=False)]
+        x_values = df_sample[size_matches[0]].values if len(size_matches) > 0 else df_sample.iloc[:, 0].values
         
-        sns.scatterplot(
-            x=x_values, 
-            y=y_values, 
-            hue=hue_values, 
-            palette="Set1", 
-            alpha=0.6, 
-            ax=ax_trend
-        )
-        ax_trend.set_xlabel("Property Size Value")
+        y_values = df_sample['Price_in_Lakhs'].values
+        
+        # Locate Investment label column with a guaranteed color fallback if completely missing
+        hue_matches = df_sample.columns[df_sample.columns.str.contains('Investment|invest', case=False)]
+        
+        if len(hue_matches) > 0:
+            sns.scatterplot(x=x_values, y=y_values, hue=df_sample[hue_matches[0]].values, palette="Set1", alpha=0.6, ax=ax_trend)
+            ax_trend.legend(title="Investment Level")
+        else:
+            # Fallback if investment column was completely dropped during notebook export phase
+            sns.scatterplot(x=x_values, y=y_values, color="dodgerblue", alpha=0.6, ax=ax_trend)
+            st.caption("ℹ️ Scatterplot running in single-variable density mode.")
+            
+        ax_trend.set_xlabel("Property Dimensions (Size)")
         ax_trend.set_ylabel("Price (Lakhs)")
-        ax_trend.legend(title="Good Investment")
         st.pyplot(fig_trend)
 else:
     st.warning("⚠️ No matching data entries found for your active filter selections. Try raising your budget or reducing minimum BHK targets.")
