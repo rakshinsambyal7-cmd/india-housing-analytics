@@ -17,8 +17,11 @@ def load_app_datasets():
     # Load original raw text columns back strictly for dropdown visualization mapping
     df_raw_text = pd.read_csv("india_housing_prices.csv", usecols=['ID', 'City', 'BHK', 'Price_in_Lakhs'])
     
-    # Merge them seamlessly on ID so we have human-readable text labels AND clean numeric columns
-    df_combined = pd.merge(df_proc, df_raw_text, on='ID', suffixes=('_scaled', ''))
+    # Drop columns from raw text that already exist in df_proc to avoid duplicate column confusion
+    df_raw_text = df_raw_text.drop(columns=['BHK', 'Price_in_Lakhs'], errors='ignore')
+    
+    # Merge them seamlessly on ID 
+    df_combined = pd.merge(df_proc, df_raw_text, on='ID')
     return df_combined
 
 try:
@@ -32,15 +35,14 @@ st.title("🏡 India Real Estate Analytics & Investment App")
 st.markdown("---")
 
 # ==========================================
-# 2. SIDEBAR FILTER LOGIC (FIXED COLUMN MAPPING)
+# 2. SIDEBAR FILTER LOGIC
 # ==========================================
 st.sidebar.header("🎯 Filter Regional Inventory")
-# Using the merged human-readable text column 'City' safely now
 selected_city = st.sidebar.selectbox("Choose Target City:", sorted(df_active['City'].unique()))
 selected_bhk = st.sidebar.slider("Select Minimum BHK:", min_value=int(df_active['BHK'].min()), max_value=int(df_active['BHK'].max()), value=3)
 max_budget = st.sidebar.number_input("Maximum Budget Caps (in Lakhs):", min_value=10, max_value=2000, value=300)
 
-# Slicing matching inventory rows using human-readable columns
+# Slicing matching inventory rows
 filtered_df = df_active[
     (df_active['City'] == selected_city) & 
     (df_active['BHK'] >= selected_bhk) & 
@@ -110,16 +112,37 @@ if len(filtered_df) > 0:
     with col_g1:
         st.subheader("Property Value Distribution in Area")
         fig_hist, ax_hist = plt.subplots(figsize=(6, 3))
-        sns.histplot(filtered_df['Price_in_Lakhs'], bins=15, kde=True, color="teal", ax=ax_hist)
+        prices_array = filtered_df['Price_in_Lakhs'].values
+        sns.histplot(x=prices_array, bins=15, kde=True, color="teal", ax=ax_hist)
         ax_hist.set_xlabel("Price in Lakhs")
         st.pyplot(fig_hist)
         
     with col_g2:
-        st.subheader("Price per SqFt Trend Matrix")
+        st.subheader("Price vs Size Trend Matrix")
         fig_trend, ax_trend = plt.subplots(figsize=(6, 3))
+        
         sample_size = min(1000, len(filtered_df))
-        sns.scatterplot(data=filtered_df.sample(sample_size), x="Size_in_SqFt_scaled", y="Price_in_Lakhs", hue="Good_Investment", palette="Set1", alpha=0.6, ax=ax_trend)
-        ax_trend.set_xlabel("Standardized Size in SqFt")
+        df_sample = filtered_df.sample(sample_size)
+        
+        # BULLETPROOF FALLBACK LOCATOR FOR COLUMN MATCHING
+        # Locate Size column
+        size_matches = df_sample.columns[df_sample.columns.str.contains('Size|size', case=False)]
+        x_values = df_sample[size_matches[0]].values if len(size_matches) > 0 else df_sample.iloc[:, 0].values
+        
+        y_values = df_sample['Price_in_Lakhs'].values
+        
+        # Locate Investment label column with a guaranteed color fallback if completely missing
+        hue_matches = df_sample.columns[df_sample.columns.str.contains('Investment|invest', case=False)]
+        
+        if len(hue_matches) > 0:
+            sns.scatterplot(x=x_values, y=y_values, hue=df_sample[hue_matches[0]].values, palette="Set1", alpha=0.6, ax=ax_trend)
+            ax_trend.legend(title="Investment Level")
+        else:
+            # Fallback if investment column was completely dropped during notebook export phase
+            sns.scatterplot(x=x_values, y=y_values, color="dodgerblue", alpha=0.6, ax=ax_trend)
+            st.caption("ℹ️ Scatterplot running in single-variable density mode.")
+            
+        ax_trend.set_xlabel("Property Dimensions (Size)")
         ax_trend.set_ylabel("Price (Lakhs)")
         st.pyplot(fig_trend)
 else:
