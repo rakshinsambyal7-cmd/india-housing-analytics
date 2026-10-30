@@ -17,8 +17,11 @@ def load_app_datasets():
     # Load original raw text columns back strictly for dropdown visualization mapping
     df_raw_text = pd.read_csv("india_housing_prices.csv", usecols=['ID', 'City', 'BHK', 'Price_in_Lakhs'])
     
-    # Merge them seamlessly on ID so we have human-readable text labels AND clean numeric columns
-    df_combined = pd.merge(df_proc, df_raw_text, on='ID', suffixes=('_scaled', ''))
+    # Drop columns from raw text that already exist in df_proc to avoid duplicate column suffix confusion
+    df_raw_text = df_raw_text.drop(columns=['BHK', 'Price_in_Lakhs'], errors='ignore')
+    
+    # Merge them seamlessly on ID 
+    df_combined = pd.merge(df_proc, df_raw_text, on='ID')
     return df_combined
 
 try:
@@ -39,7 +42,7 @@ selected_city = st.sidebar.selectbox("Choose Target City:", sorted(df_active['Ci
 selected_bhk = st.sidebar.slider("Select Minimum BHK:", min_value=int(df_active['BHK'].min()), max_value=int(df_active['BHK'].max()), value=3)
 max_budget = st.sidebar.number_input("Maximum Budget Caps (in Lakhs):", min_value=10, max_value=2000, value=300)
 
-# Slicing matching inventory rows using human-readable columns
+# Slicing matching inventory rows using clean un-suffixed columns
 filtered_df = df_active[
     (df_active['City'] == selected_city) & 
     (df_active['BHK'] >= selected_bhk) & 
@@ -118,8 +121,16 @@ if len(filtered_df) > 0:
         fig_trend, ax_trend = plt.subplots(figsize=(6, 3))
         sample_size = min(1000, len(filtered_df))
         
-        # FIX: Swapped 'Size_in_SqFt_scaled' out for 'Size_in_SqFt' to match actual columns
-        sns.scatterplot(data=filtered_df.sample(sample_size), x="Size_in_SqFt", y="Price_in_Lakhs", hue="Good_Investment", palette="Set1", alpha=0.6, ax=ax_trend)
+        # Safe scatterplot utilizing guaranteed clean names
+        sns.scatterplot(
+            data=filtered_df.sample(sample_size), 
+            x="Size_in_SqFt", 
+            y="Price_in_Lakhs", 
+            hue="Good_Investment", 
+            palette="Set1", 
+            alpha=0.6, 
+            ax=ax_trend
+        )
         ax_trend.set_xlabel("Size in SqFt")
         ax_trend.set_ylabel("Price (Lakhs)")
         st.pyplot(fig_trend)
