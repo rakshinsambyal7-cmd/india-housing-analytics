@@ -32,10 +32,9 @@ st.title("🏡 India Real Estate Analytics & Investment App")
 st.markdown("---")
 
 # ==========================================
-# 2. SIDEBAR FILTER LOGIC (FIXED COLUMN MAPPING)
+# 2. SIDEBAR FILTER LOGIC
 # ==========================================
 st.sidebar.header("🎯 Filter Regional Inventory")
-# Using the merged human-readable text column 'City' safely now
 selected_city = st.sidebar.selectbox("Choose Target City:", sorted(df_active['City'].unique()))
 selected_bhk = st.sidebar.slider("Select Minimum BHK:", min_value=int(df_active['BHK'].min()), max_value=int(df_active['BHK'].max()), value=3)
 max_budget = st.sidebar.number_input("Maximum Budget Caps (in Lakhs):", min_value=10, max_value=2000, value=300)
@@ -118,8 +117,10 @@ if len(filtered_df) > 0:
         st.subheader("Price per SqFt Trend Matrix")
         fig_trend, ax_trend = plt.subplots(figsize=(6, 3))
         sample_size = min(1000, len(filtered_df))
-        sns.scatterplot(data=filtered_df.sample(sample_size), x="Size_in_SqFt_scaled", y="Price_in_Lakhs", hue="Good_Investment", palette="Set1", alpha=0.6, ax=ax_trend)
-        ax_trend.set_xlabel("Standardized Size in SqFt")
+        
+        # FIX: Swapped 'Size_in_SqFt_scaled' out for 'Size_in_SqFt' to match actual columns
+        sns.scatterplot(data=filtered_df.sample(sample_size), x="Size_in_SqFt", y="Price_in_Lakhs", hue="Good_Investment", palette="Set1", alpha=0.6, ax=ax_trend)
+        ax_trend.set_xlabel("Size in SqFt")
         ax_trend.set_ylabel("Price (Lakhs)")
         st.pyplot(fig_trend)
 else:
